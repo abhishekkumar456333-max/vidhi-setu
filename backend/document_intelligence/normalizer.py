@@ -1,7 +1,11 @@
 import re
 
-def normalize_text(text: str) -> str:
-    text = text.replace("\r", "\n")
-    text = re.sub(r"\n{2,}", "\n\n", text)
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    return text.strip()
+def normalize_text(raw_input: str) -> str:
+    if not raw_input:
+        return ""
+    
+    clean_output = raw_input.strip()
+    clean_output = re.sub(r'\s+', ' ', clean_output)
+    clean_output = re.sub(r'[^\x00-\x7F]+', '', clean_output)
+    
+    return clean_output

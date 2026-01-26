@@ -1,17 +1,16 @@
-from legal_engine.india.contract_act import analyze_clause
+from legal_engine.india.contract_act import run_analysis
 
 class CountryAdapter:
-    def __init__(self, country: str):
-        self.country = country.lower()
+    def __init__(self, target_country: str):
+        self.target_country = target_country.lower()
 
-    def analyze(self, clauses):
-        if self.country == "india":
-            return self._analyze_india(clauses)
-        else:
-            return []
+    def perform_checks(self, clauses):
+        if self.target_country == "india":
+            return self._handle_india_logic(clauses)
+        return []
 
-    def _analyze_india(self, clauses):
-        flags = []
-        for clause in clauses:
-            flags.extend(analyze_clause(clause))
-        return flags
+    def _handle_india_logic(self, clauses):
+        results = []
+        for item in clauses:
+            results.extend(run_analysis(item))
+        return results

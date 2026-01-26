@@ -2,21 +2,19 @@ import pdfplumber
 import docx
 import io
 
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    text = ""
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text() or ""
-    return text
+def process_pdf_content(raw_bytes: bytes) -> str:
+    extracted_text = ""
+    with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf_doc:
+        for page in pdf_doc.pages:
+            extracted_text += page.extract_text() or ""
+    return extracted_text
 
+def process_docx_content(raw_bytes: bytes) -> str:
+    word_doc = docx.Document(io.BytesIO(raw_bytes))
+    return "\n".join([para.text for para in word_doc.paragraphs])
 
-def extract_text_from_docx(file_bytes: bytes) -> str:
-    doc = docx.Document(io.BytesIO(file_bytes))
-    return "\n".join([p.text for p in doc.paragraphs])
-
-
-def extract_text(file_bytes: bytes, content_type: str) -> str:
-    if content_type == "application/pdf":
-        return extract_text_from_pdf(file_bytes)
+def extract_text(raw_bytes: bytes, mime_type: str) -> str:
+    if mime_type == "application/pdf":
+        return process_pdf_content(raw_bytes)
     else:
-        return extract_text_from_docx(file_bytes)
+        return process_docx_content(raw_bytes)

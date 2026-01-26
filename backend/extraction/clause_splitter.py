@@ -1,30 +1,29 @@
 import re
 from typing import List, Dict
 
-CLAUSE_PATTERN = re.compile(
+DETECTION_REGEX = re.compile(
     r"(?:\n|^)(\d+(?:\.\d+)*\s+[A-Z][^\n]+)"
 )
 
-def split_into_clauses(text: str) -> List[Dict]:
-    clauses = []
-    parts = CLAUSE_PATTERN.split(text)
+def divide_into_clauses(full_text: str) -> List[Dict]:
+    segmented_data = []
+    fragments = DETECTION_REGEX.split(full_text)
 
-    for i in range(1, len(parts), 2):
-        title = parts[i].strip()
-        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+    for i in range(1, len(fragments), 2):
+        header = fragments[i].strip()
+        body_content = fragments[i + 1].strip() if i + 1 < len(fragments) else ""
 
-        clauses.append({
-            "clause_id": title.split()[0],
-            "title": title,
-            "text": body
+        segmented_data.append({
+            "clause_id": header.split()[0],
+            "title": header,
+            "text": body_content
         })
 
-    # fallback if no numbered clauses
-    if not clauses:
-        clauses.append({
+    if not segmented_data:
+        segmented_data.append({
             "clause_id": "1",
-            "title": "Full Contract",
-            "text": text
+            "title": "Document Content",
+            "text": full_text
         })
 
-    return clauses
+    return segmented_data

@@ -1,7 +1,7 @@
 from langdetect import detect
 
-def detect_language(text: str) -> str:
+def identify_language(input_text: str) -> str:
     try:
-        return detect(text)
-    except:
+        return detect(input_text)
+    except Exception:
         return "unknown"

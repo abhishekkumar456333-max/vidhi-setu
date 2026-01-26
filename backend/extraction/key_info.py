@@ -1,28 +1,27 @@
 import re
 from typing import Dict
 
-def extract_key_info(text: str) -> Dict:
-    info = {}
+def extract_key_details(document_text: str) -> Dict:
+    details = {}
 
-    fee_match = re.search(r"(₹|\$|INR)\s?\d+[,\d]*", text)
-    duration_match = re.search(r"(\d+\s+(months?|years?))", text, re.IGNORECASE)
-    notice_match = re.search(r"(\d+\s+days?\s+notice)", text, re.IGNORECASE)
-    law_match = re.search(r"governed by the laws of ([A-Za-z ]+)", text, re.IGNORECASE)
+    price_pattern = re.search(r"(₹|\$|INR)\s?\d+[,\d]*", document_text)
+    span_pattern = re.search(r"(\d+\s+(months?|years?))", document_text, re.IGNORECASE)
+    notice_pattern = re.search(r"(\d+\s+days?\s+notice)", document_text, re.IGNORECASE)
+    jurisdiction_pattern = re.search(r"governed by the laws of ([A-Za-z ]+)", document_text, re.IGNORECASE)
 
-    info["fees"] = fee_match.group() if fee_match else "Not found"
-    info["duration"] = duration_match.group() if duration_match else "Not found"
-    info["termination_notice"] = notice_match.group() if notice_match else "Not found"
-    info["governing_law"] = law_match.group(1) if law_match else "Not specified"
+    details["fees"] = price_pattern.group() if price_pattern else "Not detected"
+    details["duration"] = span_pattern.group() if span_pattern else "Not detected"
+    details["termination_notice"] = notice_pattern.group() if notice_pattern else "Not detected"
+    details["governing_law"] = jurisdiction_pattern.group(1) if jurisdiction_pattern else "Not specified"
 
-    # IP ownership heuristic
-    if "intellectual property" in text.lower():
-        if "client" in text.lower():
-            info["ip_ownership"] = "Client"
-        elif "contractor" in text.lower():
-            info["ip_ownership"] = "Freelancer"
+    if "intellectual property" in document_text.lower():
+        if "client" in document_text.lower():
+            details["ip_ownership"] = "Client"
+        elif "contractor" in document_text.lower():
+            details["ip_ownership"] = "Freelancer"
         else:
-            info["ip_ownership"] = "Mentioned (unclear)"
+            details["ip_ownership"] = "Mentioned (context unclear)"
     else:
-        info["ip_ownership"] = "Not mentioned"
+        details["ip_ownership"] = "Not found"
 
-    return info
+    return details

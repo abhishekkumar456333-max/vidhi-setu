@@ -1,117 +1,126 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List
+from logging_config import configure_logging
 
-# -------- Document Intelligence --------
+logger = configure_logging()
+
 from document_intelligence.uploader import validate_file
 from document_intelligence.parser import extract_text
 from document_intelligence.normalizer import normalize_text
 from document_intelligence.language import detect_language
+from document_intelligence.tokenizer import tokenize_document
 
-# -------- Extraction --------
 from extraction.clause_splitter import split_into_clauses
 from extraction.key_info import extract_key_info
 
-# -------- Legal Engine --------
 from core.country_adapter import CountryAdapter
+from legal_engine.deviation_checker import check_deviations
+from legal_engine.jurisdiction_guardrail import check_jurisdiction_compliance
 
-# -------- AI / Q&A --------
 from ai.explainer import explain_flag
 from ai.qa import answer_from_contract
 
 app = FastAPI(
-    title="AI Legal Sentinel",
-    description="Privacy-first contract analysis system",
+    title="Vidhi Setu",
+    description="Intelligent contract analysis system grounded in Indian Law",
     version="1.0.0"
 )
 
-# =====================================================
-# TEMP GLOBAL STORAGE (MVP / DEMO ONLY)
-# =====================================================
-LAST_CLAUSES: List[dict] = []
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# =====================================================
-# HEALTH CHECK
-# =====================================================
+active_clauses: List[dict] = []
+token_session_map: dict = {}
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-# =====================================================
-# UPLOAD & ANALYZE CONTRACT
-# =====================================================
+@app.delete("/session")
+def reset_session():
+    global active_clauses, token_session_map
+    active_clauses = []
+    token_session_map = {}
+    return {"status": "deleted", "message": "All session data cleared"}
+
 @app.post("/upload")
-async def upload_contract(
+async def analyze_document(
     file: UploadFile = File(...),
-    country: str = "india"
+    jurisdiction: str = "india"
 ):
-    global LAST_CLAUSES
+    global active_clauses, token_session_map
 
     try:
-        # 1. Validate file
         validate_file(file)
+        
+        content = await file.read()
+        extracted_text = extract_text(content, file.content_type)
+        normalized_content = normalize_text(extracted_text)
 
-        # 2. Read file
-        file_bytes = await file.read()
-
-        # 3. Extract text
-        raw_text = extract_text(file_bytes, file.content_type)
-        clean_text = normalize_text(raw_text)
-
-        if not clean_text:
+        if not normalized_content:
             raise HTTPException(
                 status_code=400,
-                detail="Could not extract readable text"
+                detail="Could not extract readable text from the document"
             )
 
-        # 4. Language detection
-        language = detect_language(clean_text)
+        protected_text, local_token_map = tokenize_document(normalized_content)
+        token_session_map = local_token_map
 
-        # 5. Clause segmentation
-        clauses = split_into_clauses(clean_text)
+        doc_language = detect_language(protected_text)
+        segmented_clauses = split_into_clauses(protected_text)
+        active_clauses = segmented_clauses
 
-        # 🔴 STORE CLAUSES FOR Q&A
-        LAST_CLAUSES = clauses
+        document_summary = extract_key_info(protected_text)
 
-        # 6. Key info extraction
-        summary = extract_key_info(clean_text)
+        legal_adapter = CountryAdapter(country=jurisdiction)
+        raw_flags = legal_adapter.analyze(segmented_clauses)
+        
+        curated_flags, jurisdiction_notes = check_jurisdiction_compliance(raw_flags)
 
-        # 7. Legal rule engine
-        adapter = CountryAdapter(country=country)
-        legal_flags = adapter.analyze(clauses)
-
-        # 8. Risk score (fast & deterministic)
-        risk_score = 0
-        for flag in legal_flags:
-            if flag["risk_level"] == "High":
-                risk_score += 25
-            elif flag["risk_level"] == "Medium":
-                risk_score += 10
+        computed_risk = 0
+        for item in curated_flags:
+            if item["risk_level"] == "High":
+                computed_risk += 25
+            elif item["risk_level"] == "Medium":
+                computed_risk += 10
             else:
-                risk_score += 3
-        risk_score = min(100, risk_score)
+                computed_risk += 3
+        
+        final_score = min(100, computed_risk)
 
-        # 9. FAST explainability (AI limited)
-        explained_flags = []
-        MAX_AI_EXPLANATIONS = 2
-        count = 0
+        final_flags = []
+        ai_limit = 2
+        ai_usage_count = 0
 
-        for flag in legal_flags:
-            if flag["risk_level"] == "High" and count < MAX_AI_EXPLANATIONS:
+        for flag in curated_flags:
+            if flag["risk_level"] == "High" and ai_usage_count < ai_limit:
                 flag["explanation"] = explain_flag(flag)
-                count += 1
+                ai_usage_count += 1
             else:
                 flag["explanation"] = flag["reason"]
 
-            explained_flags.append(flag)
+            final_flags.append(flag)
 
-        # 10. Final response
+        detected_deviations = check_deviations(segmented_clauses, final_flags)
+
         return {
-            "country": country,
-            "language": language,
-            "risk_score": risk_score,
-            "summary": summary,
-            "total_flags": len(explained_flags),
-            "risk_flags": explained_flags
+            "country": jurisdiction,
+            "language": doc_language,
+            "risk_score": final_score,
+            "summary": document_summary,
+            "total_flags": len(final_flags),
+            "risk_flags": final_flags,
+            "deviations": detected_deviations,
+            "deviation_count": len(detected_deviations),
+            "jurisdiction_warnings": jurisdiction_notes,
+            "pii_tokenized": len(token_session_map) > 0,
+            "token_count": len(token_session_map)
         }
 
     except ValueError as e:
@@ -120,19 +129,16 @@ async def upload_contract(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Internal error: {str(e)}"
+            detail=f"An unexpected error occurred during analysis: {str(e)}"
         )
 
-# =====================================================
-# CONTRACT Q&A ENDPOINT
-# =====================================================
 @app.post("/ask-contract")
-def ask_contract(question: str):
-    if not LAST_CLAUSES:
+def search_contract(query: str):
+    if not active_clauses:
         raise HTTPException(
             status_code=400,
-            detail="No contract uploaded yet."
+            detail="No contract has been uploaded for analysis yet."
         )
 
-    answer = answer_from_contract(LAST_CLAUSES, question)
-    return {"answer": answer}
+    response_text = answer_from_contract(active_clauses, query)
+    return {"answer": response_text}

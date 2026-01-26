@@ -3,79 +3,50 @@ from typing import List, Dict
 
 client = OpenAI()
 
-# -------------------------
-# Clause Search Utility
-# -------------------------
-def search_clauses(clauses: List[Dict], query: str) -> List[Dict]:
-    """
-    Searches relevant clauses based on keyword matching.
-    This is deterministic and avoids hallucination.
-    """
-    query_lower = query.lower()
-    matched_clauses = []
+def find_relevant_clauses(clauses: List[Dict], query_text: str) -> List[Dict]:
+    normalized_query = query_text.lower()
+    matches = []
 
-    for clause in clauses:
+    for item in clauses:
         if (
-            query_lower in clause["text"].lower()
-            or query_lower in clause["title"].lower()
+            normalized_query in item["text"].lower()
+            or normalized_query in item["title"].lower()
         ):
-            matched_clauses.append(clause)
+            matches.append(item)
 
-    return matched_clauses
+    return matches
 
-
-# -------------------------
-# Contract Question Answering
-# -------------------------
 def answer_from_contract(clauses: List[Dict], question: str) -> str:
-    """
-    Answers user questions strictly using contract content.
-    No external knowledge is allowed here.
-    """
+    matches = find_relevant_clauses(clauses, question)
 
-    # 1. Retrieve relevant clauses
-    matched_clauses = search_clauses(clauses, question)
+    if not matches:
+        return "The document does not appear to contain an answer to this specific inquiry."
 
-    # 2. If nothing relevant found
-    if not matched_clauses:
-        return (
-            "I could not find any section in the contract that directly "
-            "answers this question."
-        )
-
-    # 3. Build context from matched clauses (limit size)
-    context = "\n\n".join(
+    curated_context = "\n\n".join(
         [
-            f"Clause {c['clause_id']} ({c['title']}):\n{c['text'][:700]}"
-            for c in matched_clauses
+            f"Article {c['clause_id']} - {c['title']}:\n{c['text'][:700]}"
+            for c in matches
         ]
     )
 
-    # 4. Ask LLM to answer ONLY from provided text
-    response = client.chat.completions.create(
+    result = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are a contract assistant. "
-                    "Answer ONLY using the provided contract text. "
-                    "If the answer is not present, say so clearly. "
-                    "Do not use external knowledge."
+                    "You are a professional legal assistant. "
+                    "Use the provided contract excerpts to answer the question concisely. "
+                    "If the answer isn't in the text, clearly state that. "
+                    "Do not synthesize information from outside the provided excerpts."
                 ),
             },
             {
                 "role": "user",
-                "content": f"""
-Contract Text:
-{context}
-
-Question:
-{question}
-""",
+                "content": f"Document Snippets:\n{curated_context}\n\nSearch Query: {question}",
             },
         ],
         temperature=0.2,
     )
 
-    return response.choices[0].message.content.strip()
+    return result.choices[0].message.content.strip()
