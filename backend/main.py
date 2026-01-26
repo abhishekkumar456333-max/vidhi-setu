@@ -38,6 +38,10 @@ app.add_middleware(
 active_clauses: List[dict] = []
 token_session_map: dict = {}
 
+@app.get("/")
+def read_root():
+    return {"message": "Vidhi Setu API is operational", "status": "healthy"}
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}

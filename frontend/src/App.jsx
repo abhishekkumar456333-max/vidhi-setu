@@ -57,8 +57,10 @@ function AppContent() {
     const payload = new FormData();
     payload.append('file', contractFile);
 
+    const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '/api';
+
     try {
-      const serverResponse = await fetch('http://localhost:8000/upload', {
+      const serverResponse = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
         body: payload,
       });
@@ -151,8 +153,10 @@ function AppContent() {
           return;
       }
       
+      const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '/api';
+      
       try {
-          await fetch('http://localhost:8000/session', {
+          await fetch(`${API_BASE}/session`, {
               method: 'DELETE'
           });
           onResetSession();
