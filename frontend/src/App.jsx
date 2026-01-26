@@ -557,7 +557,7 @@ function AppContent() {
           <SlideUp delay={0.2}>
             <div className="relative aspect-video max-w-5xl mx-auto rounded-3xl overflow-hidden shadow-2xl border-8 border-white bg-zinc-900 group">
               <video 
-                ref={videoRef}
+                ref={playerRef}
                 className="w-full h-full object-cover cursor-pointer"
                 autoPlay 
                 muted 
